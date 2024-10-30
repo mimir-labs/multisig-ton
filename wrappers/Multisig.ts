@@ -8,8 +8,6 @@ export type Module = {
 export type MultisigConfig = {
     threshold: number;
     signers: Array<Address>;
-    proposers: Array<Address>;
-    allowArbitrarySeqno:boolean;
 };
 
 export type TransferRequest = { type: 'transfer', sendMode:SendMode, message:MessageRelaxed};
@@ -17,7 +15,6 @@ export type UpdateRequest   = {
     type: 'update',
     threshold: number,
     signers: Array<Address>,
-    proposers: Array<Address>
 };
 
 export type Action = TransferRequest | UpdateRequest;
@@ -100,7 +97,6 @@ export class Multisig implements Contract {
         return beginCell().storeUint(Op.actions.update_multisig_params, Params.bitsize.op)
                           .storeUint(update.threshold, Params.bitsize.signerIndex)
                           .storeRef(beginCell().storeDictDirect(arrayToCell(update.signers)))
-                          .storeDict(arrayToCell(update.proposers))
                .endCell();
     }
 
@@ -174,19 +170,21 @@ export class Multisig implements Contract {
 
     static newOrderMessage(actions: Order | Cell,
                            expirationDate: number,
-                           isSigner: boolean,
                            addrIdx: number,
-                           order_id: bigint = 115792089237316195423570985008687907853269984665640564039457584007913129639935n,
-                           query_id: number | bigint = 0) {
+                           query_id: number | bigint = 0,
+                           salt: number | bigint = 0n) {
 
-       const msgBody = beginCell().storeUint(Op.multisig.new_order, Params.bitsize.op)
+       const msgBody = beginCell().storeUint(Op.multisig.approve, Params.bitsize.op)
                                   .storeUint(query_id, Params.bitsize.queryId)
-                                  .storeUint(order_id, Params.bitsize.orderSeqno)
-                                  .storeBit(isSigner)
                                   .storeUint(addrIdx, Params.bitsize.signerIndex)
                                   .storeUint(expirationDate, Params.bitsize.time)
-
+                                  .storeUint(salt, Params.bitsize.salt);
         if(actions instanceof Cell) {
+            const order_hash = actions.hash();  
+            // set first bit to true
+            const hash_cell = beginCell().storeBit(1)    
+                                     .storeBuffer(order_hash); 
+                                    
             return msgBody.storeRef(actions).endCell();
         }
 
@@ -194,15 +192,18 @@ export class Multisig implements Contract {
             throw new Error("Order list can't be empty!");
         }
         let order_cell = Multisig.packOrder(actions);
-        return msgBody.storeRef(order_cell).endCell();
+
+        const order_hash = order_cell.hash();  
+        // set first bit to true
+        const hash_cell = beginCell().storeBit(1)    
+                                 .storeBuffer(order_hash); 
+                                 
+        return msgBody.storeRef(hash_cell).endCell();
     }
     async sendNewOrder(provider: ContractProvider, via: Sender,
            actions: Order | Cell,
-           expirationDate: number, value: bigint = toNano('1'), addrIdx?: number, isSigner?: boolean, seqno?: bigint) {
+           expirationDate: number, value: bigint = toNano('1'), addrIdx?: number, isSigner?: boolean, seqno?: bigint, salt?: bigint ) {
 
-        if(seqno == undefined) {
-            seqno = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
-        }
         if(this.configuration === undefined) {
             throw new Error("Configuration is not set: use createFromConfig or loadConfiguration");
         }
@@ -214,11 +215,7 @@ export class Multisig implements Contract {
             if(addrIdx >= 0) {
                isSigner = true;
             } else {
-               addrIdx = this.configuration.proposers.findIndex(addrCmp);
-               if (addrIdx < 0) {
-                throw new Error("Sender is not a signer or proposer");
-               }
-               isSigner = false;
+                throw new Error("Sender is not a signer");
             }
         }
         else if(isSigner === undefined || addrIdx == undefined) {
@@ -239,13 +236,13 @@ export class Multisig implements Contract {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             value,
-            body: Multisig.newOrderMessage(newActions, expirationDate, isSigner, addrIdx, seqno)
+            body: Multisig.newOrderMessage(newActions, expirationDate, addrIdx, salt)
         });
         //console.log(await provider.get("get_order_address", []));
     }
 
-    async getOrderAddress(provider: ContractProvider, orderSeqno: bigint) {
-         const { stack } = await provider.get("get_order_address", [{type: "int", value: orderSeqno},]);
+    async getOrderAddress(provider: ContractProvider, salt: bigint) {
+         const { stack } = await provider.get("get_order_address", [{type: "int", value: salt},]);
          return stack.readAddress();
     }
 
@@ -259,6 +256,7 @@ export class Multisig implements Contract {
         const { stack } = await provider.get("get_multisig_data", []);
         const threshold = stack.readBigNumber();
         const signers = cellToArray(stack.readCellOpt());
-        return {threshold, signers};
+        const signers_num = stack.readBigNumber();
+        return { threshold, signers, signers_num};
     }
 }
