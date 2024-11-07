@@ -1,17 +1,10 @@
 import { Address, beginCell,  Cell, Builder, BitString, Dictionary, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
 import { Op, Params } from "./Constants";
+import { inherits } from 'util';
 
 export type OrderConfig = {
     multisig: Address,
-    threshold: number,
-    signers: Array<Address>,
-    expiration_date: number,
-    init_sender: Address,
-    order_hash: number,
-    approvals_mask: number,
-    approvals_num: number,
-    salt: number,
-    opaque_order: Cell,  // 添加 opaque_order 参数
+    salt: number
 };
 
 function arrayToCell(arr: Array<Address>): Dictionary<number, Address> {
@@ -32,16 +25,9 @@ function cellToArray(addrDict: Cell | null) : Array<Address>  {
 }
 
 export function orderConfigToCell(config: OrderConfig): Cell {
+    const initState = beginCell().storeAddress(config.multisig).storeUint(config.salt, Params.bitsize.salt);
     return beginCell()
-        .storeAddress(config.multisig)
-        .storeUint(config.threshold, Params.bitsize.threshold)
-        .storeUint(config.approvals_mask, Params.bitsize.approvalsMask)
-        .storeUint(config.approvals_num, Params.bitsize.approvalsNum)
-        .storeUint(config.expiration_date, Params.bitsize.time)
-        .storeUint(config.order_hash, Params.bitsize.orderHash)
-        .storeUint(config.salt, Params.bitsize.salt)
-        .storeAddress(config.init_sender)
-        .storeRef(config.opaque_order)  // 存储 opaque_order
+        .storeRef(initState)
         .endCell();
 }
 
@@ -64,14 +50,11 @@ export class Order implements Contract {
     static initMessage(
         signers: Array<Address>,
         expiration_date: number,
-        order_hash: number,  // 添加 order_hash 参数
-        opaque_order: Cell,   // 添加 opaque_order 参数
+        opaque_order: Cell,
         threshold: number = 1,
         signer_idx: number = 0,
         query_id: number | bigint = 0) 
     {
-        const isHash = (order_hash !== 0); // 检查是否使用哈希
-
         const msgBody = beginCell()
             .storeUint(Op.order.approve, Params.bitsize.op)
             .storeUint(query_id, Params.bitsize.queryId)
@@ -79,23 +62,28 @@ export class Order implements Contract {
             .storeRef(beginCell().storeDictDirect(arrayToCell(signers)))
             .storeUint(expiration_date, Params.bitsize.time)
             .storeUint(signer_idx, Params.bitsize.signerIndex)
-            .storeRef(opaque_order);  // 存储 opaque_order
+            .storeRef(opaque_order);
 
 
        return msgBody.endCell();
     }
+
     async sendDeploy(provider: ContractProvider,
         via: Sender,
         value: bigint,
+        threshold: number = 1,
+        signers: Array<Address>,
+        expiration_date: number,
+        order: Cell,
         signer_idx: number = 0,
-        config: OrderConfig) {
-        const { multisig, signers, expiration_date, threshold, order_hash, salt, init_sender, opaque_order } = config;
+        query_id : number | bigint = 0
 
-
+    ) {
+    
        await provider.internal(via, {
            value,
            sendMode: SendMode.PAY_GAS_SEPARATELY,
-           body: Order.initMessage(signers, expiration_date,order_hash, opaque_order, threshold, signer_idx)  // 使用 opaque_order 和 order_hash
+           body: Order.initMessage(signers, expiration_date, order, threshold, signer_idx, query_id)  // 使用 opaque_order 和 order_hash
         });
     }
 

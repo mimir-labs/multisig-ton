@@ -42,15 +42,14 @@ export abstract class Params {
     static readonly bitsize = {
         op: 32,
         queryId: 64,
-        orderSeqno: 256,
         signerIndex: 8,
         actionIndex: 8,
         time: 48,
-        threshold: 8, // 添加 threshold 的位大小
-        approvalsMask: 256, // 假设 approvals_mask 的位大小，按需修改
-        approvalsNum: 8, // 假设 approvals_num 的位大小，按需修改
-        orderHash: 256, // 假设 order_hash 的位大小，按需修改
-        salt: 256, // 假设 salt 的位大小，按需修改
+        threshold: 8,
+        approvalsMask: 256,
+        approvalsNum: 8,
+        orderHash: 256,
+        salt: 256,
     }
 }
 

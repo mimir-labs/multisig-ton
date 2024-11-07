@@ -119,7 +119,7 @@ describe('Multisig', () => {
         // Let's deploy multisig with randomized parameters
 
         const signersNum = getRandomInt(10, 20);
-        const signers   = await blockchain.createWallets(signersNum);
+        const signers = await blockchain.createWallets(signersNum);
 
         let config = {
             threshold: signersNum - getRandomInt(2, 5),
@@ -137,8 +137,7 @@ describe('Multisig', () => {
 
 
         const salt = 0n; // salt for test
-        let   orderAddress = await testMultisig.getOrderAddress(salt);
-
+        let orderAddress = await testMultisig.getOrderAddress(salt);
 
         const rndBody = beginCell().storeUint(getRandomInt(100, 1000), 32).endCell();
         const rndMsg : TransferRequest = {type:"transfer", sendMode: 1, message: internal_relaxed({to: testAddr, value: toNano('0.015'), body: rndBody})};
@@ -150,18 +149,16 @@ describe('Multisig', () => {
             success: true
         });
 
-        // const orderContract = blockchain.openContract(Order.createFromAddress(orderAddress));
-        // const orderData = await orderContract.getOrderData();
+        const orderContract = blockchain.openContract(Order.createFromAddress(orderAddress));
+        const orderData = await orderContract.getOrderData();
 
-        // // console.log("Order signers:", orderData.signers);
-        // // console.log("Orig signers:", config.signers);
-
-        // const stringifyAddr = (a: Address) => a.toString();
-        // expect(orderData.multisig).toEqualAddress(testMultisig.address);
-        // expect(orderData.signers.map(stringifyAddr)).toEqual(config.signers.map(stringifyAddr));
-        // expect(orderData.threshold).toEqual(config.threshold);
-        // expect(orderData.approvals_num).toBe(1);
+        const stringifyAddr = (a: Address) => a.toString();
+        expect(orderData.multisig).toEqualAddress(testMultisig.address);
+        expect(orderData.signers.map(stringifyAddr)).toEqual(config.signers.map(stringifyAddr));
+        expect(orderData.threshold).toEqual(config.threshold);
+        expect(orderData.approvals_num).toBe(1);
     });
+    
     // it('should execute new message order', async () => {
     //     let initialSeqno = (await multisig.getMultisigData()).nextOrderSeqno;
     //     // await blockchain.setVerbosityForAddress(multisig.address, {blockchainLogs:true, vmLogs: 'vm_logs'});

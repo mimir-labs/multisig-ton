@@ -183,9 +183,9 @@ export class Multisig implements Contract {
             const order_hash = actions.hash();  
             // set first bit to true
             const hash_cell = beginCell().storeBit(1)    
-                                     .storeBuffer(order_hash); 
-                                    
-            return msgBody.storeRef(actions).endCell();
+                                     .storeBuffer(order_hash);
+            console.log("hash_cell is ", hash_cell);
+            return msgBody.storeRef(hash_cell).endCell();
         }
 
         if(actions.length == 0) {
@@ -202,7 +202,11 @@ export class Multisig implements Contract {
     }
     async sendNewOrder(provider: ContractProvider, via: Sender,
            actions: Order | Cell,
-           expirationDate: number, value: bigint = toNano('1'), addrIdx?: number, isSigner?: boolean, seqno?: bigint, salt?: bigint ) {
+           expirationDate: number, 
+           value: bigint = toNano('1'), 
+           addrIdx?: number, 
+           isSigner?: boolean, 
+           salt?: bigint ) {
 
         if(this.configuration === undefined) {
             throw new Error("Configuration is not set: use createFromConfig or loadConfiguration");

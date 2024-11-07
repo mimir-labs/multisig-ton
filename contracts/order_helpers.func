@@ -3,10 +3,16 @@
 #include "auto/order_code.func";
 
 cell pack_order_init_data(slice multisig_address, int salt) inline {
-    return begin_cell()
+    ;; return begin_cell()
+    ;; .store_slice(multisig_address)
+    ;; .store_order_salt(salt)
+    ;; .end_cell();
+    cell init_state = begin_cell()
     .store_slice(multisig_address)
     .store_order_salt(salt)
     .end_cell();
+    return begin_cell().store_ref(init_state).end_cell();
+    
 }
 
 cell calculate_order_state_init(slice multisig_address, int salt) inline {
@@ -75,15 +81,15 @@ int calculate_order_processing_cost(cell order_body, cell signers, int duration)
     get_compute_fee(BASECHAIN, MULTISIG_EXECUTE_GAS);
 
     int forward_fees = get_forward_fee(BASECHAIN,
-                                       INIT_ORDER_BIT_OVERHEAD + order_bits + signers_bits,
-                                       INIT_ORDER_CELL_OVERHEAD + order_cells + signers_cells) +
+        INIT_ORDER_BIT_OVERHEAD + order_bits + signers_bits,
+        INIT_ORDER_CELL_OVERHEAD + order_cells + signers_cells) +
                        get_forward_fee(BASECHAIN,
-                                       EXECUTE_ORDER_BIT_OVERHEAD + order_bits,
-                                       EXECUTE_ORDER_CELL_OVERHEAD + order_cells);
+        EXECUTE_ORDER_BIT_OVERHEAD + order_bits,
+        EXECUTE_ORDER_CELL_OVERHEAD + order_cells);
 
 
     int storage_fees = get_storage_fee(BASECHAIN, duration,
-                                       ORDER_STATE_BIT_OVERHEAD + order_bits + signers_bits,
-                                       ORDER_STATE_CELL_OVERHEAD + order_cells  + signers_cells);
+        ORDER_STATE_BIT_OVERHEAD + order_bits + signers_bits,
+        ORDER_STATE_CELL_OVERHEAD + order_cells  + signers_cells);
     return gas_fees + forward_fees + storage_fees;
 }

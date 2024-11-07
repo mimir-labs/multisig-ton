@@ -18,8 +18,9 @@ global slice ds::init_sender;  ;; the address of the order initiator
 
 () load_data() impure inline {
     slice ds = get_data().begin_parse();
-    ds::multisig_address = ds~load_msg_addr();
-    ds::salt = ds~load_order_salt();  ;; Load the salt
+    slice init_store = ds~load_ref().begin_parse();
+    ds::multisig_address = init_store~load_msg_addr();
+    ds::salt = init_store~load_order_salt();  ;; Load the salt
 
     if (ds.slice_bits() == 0) {
         ;; not initialized yet
@@ -32,15 +33,42 @@ global slice ds::init_sender;  ;; the address of the order initiator
         ds::order_hash = null();  ;; Initialize the order content hash
         ds::init_sender = null();  ;; Initialize the address of the request initiator
     } else {
-        ds::threshold = ds~load_index();
-        ds::signers = ds~load_nonempty_dict();
-        ds::approvals_mask = ds~load_uint(MASK_SIZE);
-        ds::approvals_num = ds~load_index();
         ds::expiration_date = ds~load_timestamp();
         ds::order_hash = ds~load_uint(256);  ;; Load the order content hash (256 bits)
         ds::init_sender = ds~load_msg_addr();  ;; Load the initializer's address
+        slice multisig_data = ds~load_ref().begin_parse();
+        slice approval_status = ds~load_ref().begin_parse();
+        ds::threshold = multisig_data~load_index();
+        ds::signers = multisig_data~load_nonempty_dict();
+        ds::approvals_mask = approval_status~load_uint(MASK_SIZE);
+        ds::approvals_num = approval_status~load_index();
         ds.end_parse();
     }
+}
+
+() save_data() impure inline {
+
+    cell init_store = begin_cell().store_slice(ds::multisig_address).store_order_salt(ds::salt).end_cell();
+    cell multisig_data = begin_cell()
+        .store_index(ds::threshold)
+        .store_nonempty_dict(ds::signers)
+        .end_cell();
+    
+    cell approval_status = begin_cell()
+        .store_uint(ds::approvals_mask, MASK_SIZE)
+        .store_index(ds::approvals_num)
+        .end_cell();
+        
+    set_data(
+        begin_cell()
+        .store_ref(init_store)
+        .store_timestamp(ds::expiration_date)
+        .store_hash(ds::order_hash)  ;; Store the order content hash (256 bits)
+        .store_slice(ds::init_sender)  ;; Store the initializer's address
+        .store_ref(multisig_data)
+        .store_ref(approval_status)
+        .end_cell()
+    );
 }
 
 (slice, (int, cell, int, int, cell)) ~parse_approve_params(slice in_msg_body) inline {
@@ -55,21 +83,6 @@ global slice ds::init_sender;  ;; the address of the order initiator
     return (in_msg_body, (threshold, signers, expiration_date, signer_index, opaque_order));
 }
 
-() save_data() impure inline {
-    set_data(
-        begin_cell()
-        .store_slice(ds::multisig_address)
-        .store_order_salt(ds::salt)
-        .store_index(ds::threshold)
-        .store_nonempty_dict(ds::signers)
-        .store_uint(ds::approvals_mask, MASK_SIZE)
-        .store_index(ds::approvals_num)
-        .store_timestamp(ds::expiration_date)
-        .store_hash(ds::order_hash)  ;; Store the order content hash (256 bits)
-        .store_slice(ds::init_sender)  ;; Store the initializer's address
-        .end_cell()
-    );
-}
 
 ;; UTILS
 
@@ -154,9 +167,8 @@ slice get_text_comment(slice in_msg_body) impure inline {
     ;; read from storage
     load_data();
 
-    int query_id = in_msg_body~load_query_id();
-
     int op = in_msg_body~load_op();
+    int query_id = in_msg_body~load_query_id();
 
     if (op == 0) {
         ;; message with text comment
@@ -172,7 +184,7 @@ slice get_text_comment(slice in_msg_body) impure inline {
         return ();
     }
     ;; if notInit -> init
-    if (op == op::approve) {
+    if (op == op::init) {
         throw_unless(error::unauthorized_init, equal_slices_bits(sender_address, ds::multisig_address));
 
         ;; read parameters
